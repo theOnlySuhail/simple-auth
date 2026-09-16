@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Create an account</title>
+  </head>
+  <body>
+    <main>
+      <h1>Create an account</h1>
+
+      <form action="/create" method="post">
+        <p>
+          <label for="username">Username</label>
+          <input id="username" name="username" type="text" required />
+        </p>
+        <p>
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" required />
+        </p>
+        <p>
+          <label for="confirmPassword">Confirm password</label>
+          <input id="confirmPassword" name="confirmPassword" type="password" required />
+        </p>
+        <button type="submit">Create account</button>
+      </form>
+
+      <script></script>
+
+      <p><a href="login.html">Back to log in</a></p>
+    </main>
+  </body>
+</html>
