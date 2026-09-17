@@ -24,6 +24,14 @@ interface UserRow {
   expires_at: Date;
 }
 
+declare global {
+  namespace Express {
+    interface Request {
+      username?: string;
+    }
+  }
+}
+
 interface LoginRequestBody {
   username: string;
   password: string;
@@ -35,37 +43,11 @@ interface CreateRequestBody extends LoginRequestBody {
 
 //* ----- ENDPOINTS -----
 
-app.get('/', async (req: Request, res: Response) => {
-  const sessionId = req.cookies.SESSION_ID;
-
-  const result = await db.query(sql`SELECT * FROM sessions_users WHERE session_id = $1`, [
-    sessionId,
-  ]);
-
-  if (!result.rowCount) {
-    return res.redirect('/login');
-  }
-
-  const { username, expires_at: expiresAt } = result.rows[0] as UserRow;
-
-  if (expiresAt <= new Date(Date.now())) {
-    await db.query(
-      sql`
-        UPDATE sessions_users 
-          SET session_id = $1, 
-              expires_at = $2 
-          WHERE username = $3
-      `,
-      [null, null, username],
-    );
-    res.clearCookie('SESSION_ID');
-    return res.redirect('/login');
-  }
-
+app.get('/', validSession, async (req: Request, res: Response) => {
   const homeFilePath = path.join(import.meta.dirname, '../pages/home.html');
   const html = await fs.readFile(homeFilePath, 'utf8');
 
-  return res.send(html.replace('{{username}}', username));
+  return res.send(html.replace('{{username}}', req.username!));
 });
 
 app.get('/create', alreadyLoggedIn, async (req: Request, res: Response) => {
@@ -162,7 +144,39 @@ function alreadyLoggedIn(req: Request, res: Response, next: NextFunction) {
   if (req.cookies.SESSION_ID) {
     res.redirect('/');
   }
-  next();
+  return next();
+}
+
+async function validSession(req: Request, res: Response, next: NextFunction) {
+  const sessionId = req.cookies.SESSION_ID;
+
+  const result = await db.query(sql`SELECT * FROM sessions_users WHERE session_id = $1`, [
+    sessionId,
+  ]);
+
+  if (!result.rowCount) {
+    return res.redirect('/login');
+  }
+
+  const { username, expires_at: expiresAt } = result.rows[0] as UserRow;
+
+  if (expiresAt <= new Date(Date.now())) {
+    await db.query(
+      sql`
+        UPDATE sessions_users 
+          SET session_id = $1, 
+              expires_at = $2 
+          WHERE username = $3
+      `,
+      [null, null, username],
+    );
+
+    res.clearCookie('SESSION_ID');
+    return res.redirect('/login');
+  }
+
+  req.username = username;
+  return next();
 }
 
 //* ----- HELPER FUNCTIONS -----
@@ -182,6 +196,7 @@ const escapeHtml = (value: string): string =>
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
 
+// @ts-ignore
 app.listen(env.PORT, (err) => {
   if (err) console.error(err);
   console.log(`(Sessions) Server running on port: ${env.PORT}`);
