@@ -17,6 +17,13 @@ app.use(cookieParser());
 
 //* ----- TYPES -----
 
+interface UserRow {
+  username: string;
+  password_hash: string;
+  session_id: string;
+  expires_at: Date;
+}
+
 interface LoginRequestBody {
   username: string;
   password: string;
@@ -28,22 +35,37 @@ interface CreateRequestBody extends LoginRequestBody {
 
 //* ----- ENDPOINTS -----
 
-app.get('/{home}', async (req: Request, res: Response) => {
+app.get('/', async (req: Request, res: Response) => {
   const sessionId = req.cookies.SESSION_ID;
 
-  if (!sessionId) {
+  const result = await db.query(sql`SELECT * FROM sessions_users WHERE session_id = $1`, [
+    sessionId,
+  ]);
+
+  if (!result.rowCount) {
     return res.redirect('/login');
   }
 
-  const result = await db.query(sql`SELECT username FROM users WHERE session_id = $1`, [sessionId]);
-  if (!result.rowCount) {
+  const { username, expires_at: expiresAt } = result.rows[0] as UserRow;
+
+  if (expiresAt <= new Date(Date.now())) {
+    await db.query(
+      sql`
+        UPDATE sessions_users 
+          SET session_id = $1, 
+              expires_at = $2 
+          WHERE username = $3
+      `,
+      [null, null, username],
+    );
     res.clearCookie('SESSION_ID');
     return res.redirect('/login');
   }
 
   const homeFilePath = path.join(import.meta.dirname, '../pages/home.html');
   const html = await fs.readFile(homeFilePath, 'utf8');
-  return res.send(html.replace('{{username}}', result.rows[0].username));
+
+  return res.send(html.replace('{{username}}', username));
 });
 
 app.get('/create', async (req: Request, res: Response) => {
@@ -53,22 +75,32 @@ app.get('/create', async (req: Request, res: Response) => {
 });
 
 app.post('/create', async (req: Request<{}, CreateRequestBody>, res: Response) => {
-  const { username, password, confirmPassword } = req.body;
+  const { password, confirmPassword } = req.body;
+  const username = escapeHtml(req.body.username);
+
+  // validate username
+  if (!/^[a-zA-Z0-9_]{3,30}$/.test(username)) {
+    return res.status(400).json({ err: 'Invalid username.' });
+  }
 
   if (await isUsernameTaken(username)) {
     return res.status(400).json({ err: 'username is taken, try a different one.' });
   }
 
+  // validate password
   if (password !== confirmPassword) {
     return res.status(400).json({ err: 'Passwords do not match.' });
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  if (password.length < 4 || password.length > 30) {
+    return res.status(400).json({ err: 'Password length must be 4 to 30 characters long' });
+  }
 
-  // add the user to db
+  // hass the plaintext password and add user to db
+  const passwordHash = await bcrypt.hash(password, 10);
   await db.query(
     sql`
-      INSERT INTO users(username, password_hash)
+      INSERT INTO sessions_users(username, password_hash)
       VALUES ($1, $2);
     `,
     [username, passwordHash],
@@ -86,31 +118,40 @@ app.get('/login', async (req: Request, res: Response) => {
 app.post('/login', async (req: Request<{}, LoginRequestBody>, res: Response) => {
   const { username, password } = req.body;
 
-  const result = await db.query(sql`SELECT * FROM users WHERE username = $1`, [username]);
+  // check if username exists
+  const result = await db.query(sql`SELECT * FROM sessions_users WHERE username = $1`, [username]);
   if (!result.rowCount) {
     return res.status(401).json({ err: 'Invalide username or password.' });
   }
-  const passwordHash = result.rows[0].password_hash;
+
+  // grab and validate the password
+  const { password_hash: passwordHash } = result.rows[0] as UserRow;
 
   const isValidPassowrd = await bcrypt.compare(password, passwordHash);
   if (!isValidPassowrd) {
     return res.status(400).json({ err: 'Invalide username or password.' });
   }
 
+  // create a sessiond id (with expiration date) and store it in the db
   const sessionId = crypto.randomBytes(64).toString('hex');
+  const expiresAt = new Date(Date.now() + 30000); // expires in 30 seconds
 
-  // add the user to db
   await db.query(
     sql`
-      UPDATE users
-      SET session_id = $1
-      WHERE username = $2
+      UPDATE sessions_users
+      SET session_id = $1,
+          expires_at = $2
+      WHERE username = $3
     `,
-    [sessionId, username],
+    [sessionId, expiresAt, username],
   );
 
-  const cookie = `SESSION_ID=${sessionId}; httponly; secure; samesite=strict`;
-  res.setHeader('set-cookie', cookie);
+  // set a cookie with the sessions id
+  res.cookie('SESSION_ID', sessionId, {
+    httpOnly: true,
+    secure: env.NODE_ENV === 'production',
+    sameSite: 'strict',
+  });
 
   return res.redirect('/');
 });
@@ -118,9 +159,19 @@ app.post('/login', async (req: Request<{}, LoginRequestBody>, res: Response) => 
 //* ----- HELPER FUNCTIONS -----
 
 const isUsernameTaken = async (username: string): Promise<boolean> => {
-  const result = await db.query(sql`SELECT username FROM users WHERE username = $1`, [username]);
+  const result = await db.query(sql`SELECT username FROM sessions_users WHERE username = $1`, [
+    username,
+  ]);
   return !!result.rowCount;
 };
+
+const escapeHtml = (value: string): string =>
+  value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 
 app.listen(env.PORT, (err) => {
   if (err) console.error(err);

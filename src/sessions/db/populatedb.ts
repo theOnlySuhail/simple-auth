@@ -4,11 +4,12 @@ import sql from 'sql-template-tag';
 process.loadEnvFile();
 
 const INIT_QUERY = sql`
-  CREATE TABLE IF NOT EXISTS users (
+  CREATE TABLE IF NOT EXISTS sessions_users (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     username VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    session_id VARCHAR(255)
+    session_id VARCHAR(255),
+    expires_at TIMESTAMP
   );
 
   INSERT INTO users (username, password_hash) 
