@@ -3,6 +3,10 @@ import sql from 'sql-template-tag';
 
 process.loadEnvFile();
 
+/* Passwords are <username123> 
+  ex. username: suhail, pass: suhail123
+  etc...
+*/
 const INIT_QUERY = sql`
   CREATE TABLE IF NOT EXISTS sessions_users (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
@@ -14,7 +18,7 @@ const INIT_QUERY = sql`
 
   INSERT INTO users (username, password_hash) 
     VALUES
-      ('suhail', '$2b$10$IlFZq96zBzwjPf637SbDcepKAgu5yntrrhRCgmz07kONT4H0xIGym'),
+      ('suhail', '$2b$10$IlFZq96zBzwjPf637SbDcepKAgu5yntrrhRCgmz07kONT4H0xIGym'), 
       ('taha', '$2b$10$Rc.5wnjflkb2X8XLdLm1NOigE5KoHGF2nt40I1/QpPyWE5HVW58H.'),
       ('naser', '$2b$10$lFNLyxpV10gokc3GPXs11O0eEDsTvIlU6LcjgtDvBbvCzDxzHX7Dm');
 `;
