@@ -1,5 +1,5 @@
 import express from 'express';
-import type { Request, Response } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcrypt';
 import { env } from '../config/env.ts';
 import sql from 'sql-template-tag';
@@ -68,7 +68,7 @@ app.get('/', async (req: Request, res: Response) => {
   return res.send(html.replace('{{username}}', username));
 });
 
-app.get('/create', async (req: Request, res: Response) => {
+app.get('/create', alreadyLoggedIn, async (req: Request, res: Response) => {
   const createAccountFilePath = path.join(import.meta.dirname, '../pages/create-account.html');
   const html = await fs.readFile(createAccountFilePath, 'utf8');
   res.send(html);
@@ -109,7 +109,7 @@ app.post('/create', async (req: Request<{}, CreateRequestBody>, res: Response) =
   return res.send('User created successfully!');
 });
 
-app.get('/login', async (req: Request, res: Response) => {
+app.get('/login', alreadyLoggedIn, async (req: Request, res: Response) => {
   const createAccountFilePath = path.join(import.meta.dirname, '../pages/login.html');
   const html = await fs.readFile(createAccountFilePath, 'utf8');
   res.send(html);
@@ -155,6 +155,15 @@ app.post('/login', async (req: Request<{}, LoginRequestBody>, res: Response) => 
 
   return res.redirect('/');
 });
+
+//* ----- MIDDLEWARES -----
+
+function alreadyLoggedIn(req: Request, res: Response, next: NextFunction) {
+  if (req.cookies.SESSION_ID) {
+    res.redirect('/');
+  }
+  next();
+}
 
 //* ----- HELPER FUNCTIONS -----
 
