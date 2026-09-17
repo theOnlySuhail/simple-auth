@@ -46,7 +46,6 @@ interface CreateRequestBody extends LoginRequestBody {
 app.get('/', validSession, async (req: Request, res: Response) => {
   const homeFilePath = path.join(import.meta.dirname, '../pages/home.html');
   const html = await fs.readFile(homeFilePath, 'utf8');
-
   return res.send(html.replace('{{username}}', req.username!));
 });
 
@@ -134,6 +133,23 @@ app.post('/login', async (req: Request<{}, LoginRequestBody>, res: Response) => 
     secure: env.NODE_ENV === 'production',
     sameSite: 'strict',
   });
+
+  return res.redirect('/');
+});
+
+app.post('/logout', validSession, async (req: Request, res: Response) => {
+  // null out the session_id and expiration date
+  await db.query(
+    sql`UPDATE sessions_users
+        SET session_id = $1,
+            expires_at = $2
+        WHERE username = $3
+            `,
+    [null, null, req.username],
+  );
+
+  // delete SESSION_ID cookie
+  res.clearCookie('SESSION_ID');
 
   return res.redirect('/');
 });
