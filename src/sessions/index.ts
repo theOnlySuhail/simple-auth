@@ -52,7 +52,7 @@ app.get('/', validSession, async (req: Request, res: Response) => {
 app.get('/create', alreadyLoggedIn, async (req: Request, res: Response) => {
   const createAccountFilePath = path.join(import.meta.dirname, '../pages/create-account.html');
   const html = await fs.readFile(createAccountFilePath, 'utf8');
-  res.send(html);
+  return res.send(html);
 });
 
 app.post('/create', async (req: Request<{}, CreateRequestBody>, res: Response) => {
@@ -93,7 +93,7 @@ app.post('/create', async (req: Request<{}, CreateRequestBody>, res: Response) =
 app.get('/login', alreadyLoggedIn, async (req: Request, res: Response) => {
   const createAccountFilePath = path.join(import.meta.dirname, '../pages/login.html');
   const html = await fs.readFile(createAccountFilePath, 'utf8');
-  res.send(html);
+  return res.send(html);
 });
 
 app.post('/login', async (req: Request<{}, LoginRequestBody>, res: Response) => {
@@ -147,7 +147,7 @@ app.post('/logout', validSession, async (req: Request, res: Response) => {
 
 function alreadyLoggedIn(req: Request, res: Response, next: NextFunction) {
   if (req.cookies.SESSION_ID) {
-    res.redirect('/');
+    return res.redirect('/');
   }
   return next();
 }
