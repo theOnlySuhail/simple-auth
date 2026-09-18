@@ -138,19 +138,8 @@ app.post('/login', async (req: Request<{}, LoginRequestBody>, res: Response) => 
 });
 
 app.post('/logout', validSession, async (req: Request, res: Response) => {
-  // null out the session_id and expiration date
-  await db.query(
-    sql`UPDATE sessions_users
-        SET session_id = $1,
-            expires_at = $2
-        WHERE username = $3
-            `,
-    [null, null, req.username],
-  );
-
-  // delete SESSION_ID cookie
-  res.clearCookie('SESSION_ID');
-
+  if (!req.username) return res.status(400).json({ err: 'username undefined' });
+  await logout(req.username, res);
   return res.redirect('/');
 });
 
@@ -177,17 +166,7 @@ async function validSession(req: Request, res: Response, next: NextFunction) {
   const { username, expires_at: expiresAt } = result.rows[0] as UserRow;
 
   if (expiresAt <= new Date(Date.now())) {
-    await db.query(
-      sql`
-        UPDATE sessions_users 
-          SET session_id = $1, 
-              expires_at = $2 
-          WHERE username = $3
-      `,
-      [null, null, username],
-    );
-
-    res.clearCookie('SESSION_ID');
+    await logout(username, res);
     return res.redirect('/login');
   }
 
@@ -203,6 +182,20 @@ const isUsernameTaken = async (username: string): Promise<boolean> => {
   ]);
   return !!result.rowCount;
 };
+
+async function logout(username: string, res: Response) {
+  await db.query(
+    sql`UPDATE sessions_users
+        SET session_id = $1,
+            expires_at = $2
+        WHERE username = $3
+            `,
+    [null, null, username],
+  );
+
+  // delete SESSION_ID cookie
+  res.clearCookie('SESSION_ID');
+}
 
 const escapeHtml = (value: string): string =>
   value
