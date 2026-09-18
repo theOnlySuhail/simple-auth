@@ -1,7 +1,6 @@
 import { Client } from 'pg';
 import sql from 'sql-template-tag';
-
-process.loadEnvFile();
+import { env } from '../../config/env.ts';
 
 /* Passwords are <username123> 
   ex. username: suhail, pass: suhail123
@@ -27,7 +26,7 @@ export async function init() {
   console.log('seeding...');
 
   const client = await new Client({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: env.DATABASE_URL,
   }).connect();
 
   await client.query(INIT_QUERY);
@@ -35,6 +34,5 @@ export async function init() {
 
   console.log('done');
 }
-
 
 init();
