@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "session": "tsx watch sessions/index.ts"
+    "session": "tsx watch session-auth/index.ts"
   },
   "type": "module",
   "dependencies": {
