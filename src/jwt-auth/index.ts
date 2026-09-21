@@ -6,7 +6,6 @@ import sql from 'sql-template-tag';
 import * as db from './db/index.ts';
 import fs from 'fs/promises';
 import path from 'path';
-import crypto from 'crypto';
 import cookieParser from 'cookie-parser';
 import jwt from 'jsonwebtoken';
 
@@ -51,10 +50,12 @@ interface CreateRequestBody extends LoginRequestBody {
 
 app.get('/', validSession, async (req: Request, res: Response) => {
   const homeFilePath = path.join(import.meta.dirname, '../pages/home.html');
-  const html = await fs.readFile(homeFilePath, 'utf8');
-  return res.send(
-    html.replace('{{username}}', req.user!.username).replace('{{role}}', req.user!.role),
-  );
+  let html = await fs.readFile(homeFilePath, 'utf8');
+  console.log(req.user!.username);
+  console.log(req.user!.role);
+  html = html.replace('{{username}}', req.user!.username);
+  html = html.replace('{{role}}', req.user!.role);
+  return res.send(html);
 });
 
 app.get('/create', alreadyLoggedIn, async (req: Request, res: Response) => {
@@ -63,7 +64,7 @@ app.get('/create', alreadyLoggedIn, async (req: Request, res: Response) => {
   return res.send(html);
 });
 
-app.post('/create', async (req: Request<{}, CreateRequestBody>, res: Response) => {
+app.post('/create', async (req: Request<{}, {}, CreateRequestBody>, res: Response) => {
   const { password, confirmPassword } = req.body;
   const username = escapeHtml(req.body.username);
 
@@ -120,19 +121,18 @@ app.get('/login', alreadyLoggedIn, async (req: Request, res: Response) => {
   return res.send(html);
 });
 
-app.post('/login', async (req: Request<{}, LoginRequestBody>, res: Response) => {
+app.post('/login', async (req: Request<{}, {}, LoginRequestBody>, res: Response) => {
   const { username, password } = req.body;
 
   // check if username exists
-  const usernameResult = await db.query(sql`SELECT * FROM jwt_users WHERE username = $1`, [
-    username,
-  ]);
-  if (!usernameResult.rowCount) {
+  const userResult = await db.query(sql`SELECT * FROM jwt_users WHERE username = $1`, [username]);
+
+  if (!userResult.rowCount) {
     return res.status(401).json({ err: 'Invalide username or password.' });
   }
 
   // grab and validate the password
-  const { password_hash: passwordHash } = usernameResult.rows[0] as UserRow;
+  const { password_hash: passwordHash } = userResult.rows[0] as UserRow;
 
   const isValidPassowrd = await bcrypt.compare(password, passwordHash);
   if (!isValidPassowrd) {
@@ -140,14 +140,7 @@ app.post('/login', async (req: Request<{}, LoginRequestBody>, res: Response) => 
   }
 
   // grap the refresh_token
-  const userResult = await db.query(
-    sql`SELECT * FROM jwt_users
-        WHERE username = $1
-    `,
-    [username],
-  );
-
-  const { role, refreshToken } = userResult.rows[0];
+  const { role, refresh_token: refreshToken } = userResult.rows[0] as UserRow;
   try {
     if (!refreshToken) throw new Error('no refresh token');
     jwt.verify(refreshToken, env.REFRESH_TOKEN_SECRET);
@@ -166,7 +159,7 @@ app.post('/login', async (req: Request<{}, LoginRequestBody>, res: Response) => 
   }
 
   // Create a new access token
-  const payload = {
+  const payload: User = {
     username: username,
     role: role,
   };
@@ -179,11 +172,19 @@ app.post('/login', async (req: Request<{}, LoginRequestBody>, res: Response) => 
     secure: env.NODE_ENV === 'production',
   });
 
+  console.log(`user in payload: ${payload.username}`);
+
   req.user = payload;
 
   return res.redirect('/');
 });
 
+app.post('/logout', validSession, async (req: Request, res: Response) => {
+  if (!req.user) return res.status(400).json({ err: 'user undefined' });
+  console.log(`user name from logout: ${req.user.username}`);
+  await logout(req.user.username, res);
+  return res.redirect('/');
+});
 
 //* ----- MIDDLEWARES -----
 
@@ -200,9 +201,8 @@ async function validSession(req: Request, res: Response, next: NextFunction) {
   if (!accessToken) return res.redirect('/login');
 
   try {
-    const decoded = jwt.verify(accessToken, env.ACCESS_TOKEN_SECRET);
-    // @ts-ignore
-    req.user = { username: decoded.user, role: decoded.role };
+    const decoded = jwt.verify(accessToken, env.ACCESS_TOKEN_SECRET) as User;
+    req.user = { username: decoded.username, role: decoded.role };
     return next();
   } catch (err: unknown) {
     // clear cookie and redirect user if any error occues except TokenExpiredError
@@ -271,6 +271,25 @@ const isUsernameTaken = async (username: string): Promise<boolean> => {
   ]);
   return !!result.rowCount;
 };
+
+/**
+ * Removes refresh_token from db & clears ACCESS_TOKEN
+ */
+async function logout(username: string, res: Response) {
+  // remove the refresh token from db
+  await db.query(
+    sql`
+        UPDATE jwt_users
+        SET refresh_token = $1
+        WHERE username = $2
+    `,
+    [null, username],
+  );
+
+  // delete access token cookie
+  res.clearCookie('ACCESS_TOKEN');
+  res.redirect('/login');
+}
 
 const escapeHtml = (value: string): string =>
   value
