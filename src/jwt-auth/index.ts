@@ -18,6 +18,13 @@ app.use(cookieParser());
 
 //* ----- TYPES -----
 
+interface UserRow {
+  username: string;
+  password_hash: string;
+  role: 'admin' | 'user';
+  refresh_token: string;
+}
+
 interface User {
   username: string;
   role: 'admin' | 'user';
@@ -106,6 +113,77 @@ app.post('/create', async (req: Request<{}, CreateRequestBody>, res: Response) =
 
   return res.redirect('/');
 });
+
+app.get('/login', alreadyLoggedIn, async (req: Request, res: Response) => {
+  const createAccountFilePath = path.join(import.meta.dirname, '../pages/login.html');
+  const html = await fs.readFile(createAccountFilePath, 'utf8');
+  return res.send(html);
+});
+
+app.post('/login', async (req: Request<{}, LoginRequestBody>, res: Response) => {
+  const { username, password } = req.body;
+
+  // check if username exists
+  const usernameResult = await db.query(sql`SELECT * FROM jwt_users WHERE username = $1`, [
+    username,
+  ]);
+  if (!usernameResult.rowCount) {
+    return res.status(401).json({ err: 'Invalide username or password.' });
+  }
+
+  // grab and validate the password
+  const { password_hash: passwordHash } = usernameResult.rows[0] as UserRow;
+
+  const isValidPassowrd = await bcrypt.compare(password, passwordHash);
+  if (!isValidPassowrd) {
+    return res.status(400).json({ err: 'Invalide username or password.' });
+  }
+
+  // grap the refresh_token
+  const userResult = await db.query(
+    sql`SELECT * FROM jwt_users
+        WHERE username = $1
+    `,
+    [username],
+  );
+
+  const { role, refreshToken } = userResult.rows[0];
+  try {
+    if (!refreshToken) throw new Error('no refresh token');
+    jwt.verify(refreshToken, env.REFRESH_TOKEN_SECRET);
+  } catch (err: unknown) {
+    // recreate the refresh token
+    const newRefreshToken = jwt.sign({}, env.REFRESH_TOKEN_SECRET, { expiresIn: '1m' });
+
+    await db.query(
+      sql`
+        UPDATE jwt_users
+        SET refresh_token = $1
+        WHERE username = $2
+    `,
+      [newRefreshToken, username],
+    );
+  }
+
+  // Create a new access token
+  const payload = {
+    username: username,
+    role: role,
+  };
+
+  const newAccessToken = jwt.sign(payload, env.ACCESS_TOKEN_SECRET, { expiresIn: '30s' });
+
+  res.cookie('ACCESS_TOKEN', newAccessToken, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: env.NODE_ENV === 'production',
+  });
+
+  req.user = payload;
+
+  return res.redirect('/');
+});
+
 
 //* ----- MIDDLEWARES -----
 
