@@ -55,7 +55,7 @@ app.get('/create', alreadyLoggedIn, async (req: Request, res: Response) => {
   return res.send(html);
 });
 
-app.post('/create', async (req: Request<{}, CreateRequestBody>, res: Response) => {
+app.post('/create', async (req: Request<{}, {}, CreateRequestBody>, res: Response) => {
   const { password, confirmPassword } = req.body;
   const username = escapeHtml(req.body.username);
 
@@ -96,7 +96,7 @@ app.get('/login', alreadyLoggedIn, async (req: Request, res: Response) => {
   return res.send(html);
 });
 
-app.post('/login', async (req: Request<{}, LoginRequestBody>, res: Response) => {
+app.post('/login', async (req: Request<{}, {}, LoginRequestBody>, res: Response) => {
   const { username, password } = req.body;
 
   // check if username exists
