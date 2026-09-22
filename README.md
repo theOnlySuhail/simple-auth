@@ -5,7 +5,9 @@ This project is a small authentication exercise for EYouth Academy. It shows two
 - `session-auth` stores session IDs in PostgreSQL and sends the ID in an HTTP-only cookie.
 - `jwt-auth` uses JSON Web Tokens for authentication.
 
-The project is for learning. It is not ready to use as a production authentication service.
+<div style="border: 1px solid #d1242f; border-left: 5px solid #d1242f; padding: 12px; color: #d1242f;">
+  <strong>Important:</strong> This project is for learning. It is not ready for production use.
+</div>
 
 ## Setup
 
