@@ -301,6 +301,9 @@ const escapeHtml = (value: string): string =>
 
 // @ts-ignore
 app.listen(env.PORT, (err) => {
-  if (err) console.error(err);
+  if (err) {
+    console.log(err);
+    return;
+  }
   console.log(`(JWT) Server running on port: ${env.PORT}`);
 });

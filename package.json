@@ -1,7 +1,7 @@
 {
   "scripts": {
-    "session": "tsx watch session-auth/index.ts",
-    "jwt": "tsx watch jwt-auth/index.ts"
+    "session": "tsx watch session-auth/app.ts",
+    "jwt": "tsx watch jwt-auth/app.ts"
   },
   "type": "module",
   "dependencies": {
